@@ -5,11 +5,62 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import javax.swing.WindowConstants;
+import Model.User;
+import javax.swing.JOptionPane;
 
 public class Frame extends javax.swing.JFrame {
+    
+    private User currentUser; // Session management
 
     public Frame() {
         initComponents();
+    }
+    
+    public void setCurrentUser(User user) {
+        this.currentUser = user;
+        updateNavigationButtons();
+    }
+    
+    public User getCurrentUser() {
+        return this.currentUser;
+    }
+    
+    private void clearSession() {
+        this.currentUser = null;
+        updateNavigationButtons();
+    }
+    
+    private void updateNavigationButtons() {
+        if (currentUser == null) {
+            // Hide all navigation buttons when not logged in
+            adminBtn.setVisible(false);
+            managerBtn.setVisible(false);
+            staffBtn.setVisible(false);
+            clientBtn.setVisible(false);
+            return;
+        }
+        
+        // Role-based access control
+        int userRole = currentUser.getRole();
+        adminBtn.setVisible(userRole == 5); // Admin only
+        managerBtn.setVisible(userRole >= 4); // Manager and Admin
+        staffBtn.setVisible(userRole >= 3); // Staff, Manager, and Admin
+        clientBtn.setVisible(userRole >= 2); // All roles
+    }
+    
+    private boolean hasPermission(int requiredRole) {
+        if (currentUser == null) {
+            JOptionPane.showMessageDialog(this, "Please login first", "Access Denied", JOptionPane.WARNING_MESSAGE);
+            loginNav();
+            return false;
+        }
+        
+        if (currentUser.getRole() < requiredRole) {
+            JOptionPane.showMessageDialog(this, "Insufficient privileges", "Access Denied", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        
+        return true;
     }
 
     @SuppressWarnings("unchecked")
@@ -180,26 +231,35 @@ public class Frame extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void adminBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_adminBtnActionPerformed
-        adminHomePnl.showPnl("home");
-        contentView.show(Content, "adminHomePnl");
+        if (hasPermission(5)) { // Admin role required
+            adminHomePnl.showPnl("home");
+            contentView.show(Content, "adminHomePnl");
+        }
     }//GEN-LAST:event_adminBtnActionPerformed
 
     private void managerBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_managerBtnActionPerformed
-        managerHomePnl.showPnl("home");
-        contentView.show(Content, "managerHomePnl");
+        if (hasPermission(4)) { // Manager role required
+            managerHomePnl.showPnl("home");
+            contentView.show(Content, "managerHomePnl");
+        }
     }//GEN-LAST:event_managerBtnActionPerformed
 
     private void staffBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_staffBtnActionPerformed
-        staffHomePnl.showPnl("home");
-        contentView.show(Content, "staffHomePnl");
+        if (hasPermission(3)) { // Staff role required
+            staffHomePnl.showPnl("home");
+            contentView.show(Content, "staffHomePnl");
+        }
     }//GEN-LAST:event_staffBtnActionPerformed
 
     private void clientBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_clientBtnActionPerformed
-        clientHomePnl.showPnl("home");
-        contentView.show(Content, "clientHomePnl");
+        if (hasPermission(2)) { // Client role required
+            clientHomePnl.showPnl("home");
+            contentView.show(Content, "clientHomePnl");
+        }
     }//GEN-LAST:event_clientBtnActionPerformed
 
     private void logoutBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_logoutBtnActionPerformed
+        clearSession();
         frameView.show(Container, "loginPnl");
     }//GEN-LAST:event_logoutBtnActionPerformed
 
@@ -245,10 +305,43 @@ public class Frame extends javax.swing.JFrame {
     }
     
     public void mainNav(){
-        frameView.show(Container, "homePnl");
+        if (currentUser != null) {
+            frameView.show(Container, "homePnl");
+            // Navigate to appropriate home based on role
+            switch(currentUser.getRole()) {
+                case 5: // Admin
+                    if (hasPermission(5)) {
+                        adminHomePnl.showPnl("home");
+                        contentView.show(Content, "adminHomePnl");
+                    }
+                    break;
+                case 4: // Manager
+                    if (hasPermission(4)) {
+                        managerHomePnl.showPnl("home");
+                        contentView.show(Content, "managerHomePnl");
+                    }
+                    break;
+                case 3: // Staff
+                    if (hasPermission(3)) {
+                        staffHomePnl.showPnl("home");
+                        contentView.show(Content, "staffHomePnl");
+                    }
+                    break;
+                case 2: // Client
+                default:
+                    if (hasPermission(2)) {
+                        clientHomePnl.showPnl("home");
+                        contentView.show(Content, "clientHomePnl");
+                    }
+                    break;
+            }
+        } else {
+            loginNav();
+        }
     }
     
     public void loginNav(){
+        clearSession();
         frameView.show(Container, "loginPnl");
     }
     

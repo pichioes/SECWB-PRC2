@@ -4,17 +4,41 @@ import Model.History;
 import Model.Logs;
 import Model.Product;
 import Model.User;
+import java.sql.*;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.Base64;
 
 public class SQLite {
     
     public int DEBUG_MODE = 0;
     String driverURL = "jdbc:sqlite:" + "database.db";
+    
+    // Password hashing with salt
+    public String hashPassword(String password, String salt) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(salt.getBytes());
+            byte[] hashedPassword = md.digest(password.getBytes());
+            return Base64.getEncoder().encodeToString(hashedPassword);
+        } catch (Exception e) {
+            throw new RuntimeException("Error hashing password", e);
+        }
+    }
+    
+    // Generate random salt
+    public String generateSalt() {
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[16];
+        random.nextBytes(salt);
+        return Base64.getEncoder().encodeToString(salt);
+    }
     
     public void createNewDatabase() {
         try (Connection conn = DriverManager.getConnection(driverURL)) {
@@ -80,13 +104,17 @@ public class SQLite {
         }
     }
      
+    // Create user table with salt column
     public void createUserTable() {
         String sql = "CREATE TABLE IF NOT EXISTS users (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
             + " username TEXT NOT NULL UNIQUE,\n"
             + " password TEXT NOT NULL,\n"
+            + " salt TEXT NOT NULL,\n"
             + " role INTEGER DEFAULT 2,\n"
-            + " locked INTEGER DEFAULT 0\n"
+            + " locked INTEGER DEFAULT 0,\n"
+            + " failed_attempts INTEGER DEFAULT 0,\n"
+            + " last_failed_attempt TIMESTAMP\n"
             + ");";
 
         try (Connection conn = DriverManager.getConnection(driverURL);
@@ -179,21 +207,29 @@ public class SQLite {
         }
     }
     
-    public void addUser(String username, String password) {
-        String sql = "INSERT INTO users(username,password) VALUES('" + username + "','" + password + "')";
+    // Secure user registration with input validation
+    public boolean addUser(String username, String password) {
+        // Input validation
+        if (!isValidUsername(username) || !isValidPassword(password)) {
+            return false;
+        }
+        
+        String salt = generateSalt();
+        String hashedPassword = hashPassword(password, salt);
+        String sql = "INSERT INTO users(username, password, salt) VALUES(?, ?, ?)";
         
         try (Connection conn = DriverManager.getConnection(driverURL);
-            Statement stmt = conn.createStatement()){
-            stmt.execute(sql);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
-//      PREPARED STATEMENT EXAMPLE
-//      String sql = "INSERT INTO users(username,password) VALUES(?,?)";
-//      PreparedStatement pstmt = conn.prepareStatement(sql)) {
-//      pstmt.setString(1, username);
-//      pstmt.setString(2, password);
-//      pstmt.executeUpdate();
-        } catch (Exception ex) {
-            System.out.print(ex);
+            pstmt.setString(1, username);
+            pstmt.setString(2, hashedPassword);
+            pstmt.setString(3, salt);
+            pstmt.executeUpdate();
+            return true;
+            
+        } catch (SQLException ex) {
+            System.out.print("Registration failed: " + ex.getMessage());
+            return false;
         }
     }
     
@@ -316,5 +352,124 @@ public class SQLite {
             System.out.print(ex);
         }
         return product;
+    }
+    
+    // Secure user authentication
+    public User authenticateUser(String username, String password) {
+        String sql = "SELECT id, username, password, salt, role, locked, failed_attempts FROM users WHERE username = ?";
+        
+        try (Connection conn = DriverManager.getConnection(driverURL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+            
+            if (rs.next()) {
+                // Check if account is locked
+                if (rs.getInt("locked") == 1) {
+                    return null; // Account locked
+                }
+                
+                String storedHash = rs.getString("password");
+                String salt = rs.getString("salt");
+                String inputHash = hashPassword(password, salt);
+                
+                if (storedHash.equals(inputHash)) {
+                    // Reset failed attempts on successful login
+                    resetFailedAttempts(username);
+                    return new User(rs.getInt("id"), rs.getString("username"), 
+                                  "", rs.getInt("role"), rs.getInt("locked"));
+                } else {
+                    // Increment failed attempts
+                    incrementFailedAttempts(username);
+                    return null;
+                }
+            }
+        } catch (SQLException ex) {
+            System.out.print("Authentication error: " + ex.getMessage());
+        }
+        return null;
+    }
+    
+    // Account lockout mechanism
+    private void incrementFailedAttempts(String username) {
+        String sql = "UPDATE users SET failed_attempts = failed_attempts + 1, " +
+                    "last_failed_attempt = datetime('now') WHERE username = ?";
+        
+        try (Connection conn = DriverManager.getConnection(driverURL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            pstmt.executeUpdate();
+            
+            // Lock account after 3 failed attempts
+            lockAccountIfNeeded(username);
+            
+        } catch (SQLException ex) {
+            System.out.print("Error updating failed attempts: " + ex.getMessage());
+        }
+    }
+    
+    private void lockAccountIfNeeded(String username) {
+        String sql = "UPDATE users SET locked = 1 WHERE username = ? AND failed_attempts >= 3";
+        
+        try (Connection conn = DriverManager.getConnection(driverURL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            pstmt.executeUpdate();
+            
+        } catch (SQLException ex) {
+            System.out.print("Error locking account: " + ex.getMessage());
+        }
+    }
+    
+    private void resetFailedAttempts(String username) {
+        String sql = "UPDATE users SET failed_attempts = 0, last_failed_attempt = NULL WHERE username = ?";
+        
+        try (Connection conn = DriverManager.getConnection(driverURL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            pstmt.executeUpdate();
+            
+        } catch (SQLException ex) {
+            System.out.print("Error resetting failed attempts: " + ex.getMessage());
+        }
+    }
+    
+    // Input validation methods
+    public boolean isValidUsername(String username) {
+        if (username == null || username.trim().isEmpty()) return false;
+        if (username.length() < 3 || username.length() > 50) return false;
+        return username.matches("^[a-zA-Z0-9_]+$"); // Alphanumeric and underscore only
+    }
+    
+    public boolean isValidPassword(String password) {
+        if (password == null || password.length() < 8) return false;
+        
+        boolean hasUpper = password.matches(".*[A-Z].*");
+        boolean hasLower = password.matches(".*[a-z].*");
+        boolean hasDigit = password.matches(".*[0-9].*");
+        boolean hasSpecial = password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?].*");
+        
+        return hasUpper && hasLower && hasDigit && hasSpecial;
+    }
+    
+    // Check if username already exists
+    public boolean usernameExists(String username) {
+        String sql = "SELECT COUNT(*) FROM users WHERE username = ?";
+        
+        try (Connection conn = DriverManager.getConnection(driverURL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+            return rs.getInt(1) > 0;
+            
+        } catch (SQLException ex) {
+            System.out.print("Error checking username: " + ex.getMessage());
+            return true; // Assume exists to be safe
+        }
     }
 }
