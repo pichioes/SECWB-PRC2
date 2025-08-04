@@ -12,36 +12,39 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.util.Base64;
 
 public class SQLite {
     
     public int DEBUG_MODE = 0;
     String driverURL = "jdbc:sqlite:" + "database.db";
     
-    // Password hashing with salt
-    public String hashPassword(String password, String salt) {
+    // Initialize database connection with proper settings
+    private Connection getConnection() throws SQLException {
+        Connection conn = DriverManager.getConnection(driverURL);
+        // Set timeout to prevent long waits
+        conn.createStatement().execute("PRAGMA busy_timeout = 3000;");
+        // Enable WAL mode for better concurrency
+        conn.createStatement().execute("PRAGMA journal_mode = WAL;");
+        return conn;
+    }
+    
+    // Simple password hashing (without salt)
+    public String hashPassword(String password) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(salt.getBytes());
             byte[] hashedPassword = md.digest(password.getBytes());
-            return Base64.getEncoder().encodeToString(hashedPassword);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hashedPassword) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
         } catch (Exception e) {
             throw new RuntimeException("Error hashing password", e);
         }
     }
     
-    // Generate random salt
-    public String generateSalt() {
-        SecureRandom random = new SecureRandom();
-        byte[] salt = new byte[16];
-        random.nextBytes(salt);
-        return Base64.getEncoder().encodeToString(salt);
-    }
-    
     public void createNewDatabase() {
-        try (Connection conn = DriverManager.getConnection(driverURL)) {
+        try (Connection conn = getConnection()) {
             if (conn != null) {
                 DatabaseMetaData meta = conn.getMetaData();
                 System.out.println("Database database.db created.");
@@ -104,13 +107,12 @@ public class SQLite {
         }
     }
      
-    // Create user table with salt column
+    // Create user table without salt column
     public void createUserTable() {
         String sql = "CREATE TABLE IF NOT EXISTS users (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
             + " username TEXT NOT NULL UNIQUE,\n"
             + " password TEXT NOT NULL,\n"
-            + " salt TEXT NOT NULL,\n"
             + " role INTEGER DEFAULT 2,\n"
             + " locked INTEGER DEFAULT 0,\n"
             + " failed_attempts INTEGER DEFAULT 0,\n"
@@ -207,23 +209,21 @@ public class SQLite {
         }
     }
     
-    // Secure user registration with input validation
+    // User registration with input validation (no salt)
     public boolean addUser(String username, String password) {
         // Input validation
         if (!isValidUsername(username) || !isValidPassword(password)) {
             return false;
         }
         
-        String salt = generateSalt();
-        String hashedPassword = hashPassword(password, salt);
-        String sql = "INSERT INTO users(username, password, salt) VALUES(?, ?, ?)";
+        String hashedPassword = hashPassword(password);
+        String sql = "INSERT INTO users(username, password) VALUES(?, ?)";
         
         try (Connection conn = DriverManager.getConnection(driverURL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, username);
             pstmt.setString(2, hashedPassword);
-            pstmt.setString(3, salt);
             pstmt.executeUpdate();
             return true;
             
@@ -354,11 +354,11 @@ public class SQLite {
         return product;
     }
     
-    // Secure user authentication
+    // User authentication without salt - improved connection handling
     public User authenticateUser(String username, String password) {
-        String sql = "SELECT id, username, password, salt, role, locked, failed_attempts FROM users WHERE username = ?";
+        String sql = "SELECT id, username, password, role, locked, failed_attempts FROM users WHERE username = ?";
         
-        try (Connection conn = DriverManager.getConnection(driverURL);
+        try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, username);
@@ -371,8 +371,7 @@ public class SQLite {
                 }
                 
                 String storedHash = rs.getString("password");
-                String salt = rs.getString("salt");
-                String inputHash = hashPassword(password, salt);
+                String inputHash = hashPassword(password);
                 
                 if (storedHash.equals(inputHash)) {
                     // Reset failed attempts on successful login
@@ -391,43 +390,61 @@ public class SQLite {
         return null;
     }
     
-    // Account lockout mechanism
+    // Account lockout mechanism with better connection handling
     private void incrementFailedAttempts(String username) {
-        String sql = "UPDATE users SET failed_attempts = failed_attempts + 1, " +
-                    "last_failed_attempt = datetime('now') WHERE username = ?";
+        String updateSql = "UPDATE users SET failed_attempts = failed_attempts + 1, " +
+                          "last_failed_attempt = datetime('now') WHERE username = ?";
+        String lockSql = "UPDATE users SET locked = 1 WHERE username = ? AND failed_attempts >= 3";
         
-        try (Connection conn = DriverManager.getConnection(driverURL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        Connection conn = null;
+        try {
+            conn = getConnection();
+            conn.setAutoCommit(false); // Start transaction
             
-            pstmt.setString(1, username);
-            pstmt.executeUpdate();
+            // Update failed attempts
+            try (PreparedStatement pstmt = conn.prepareStatement(updateSql)) {
+                pstmt.setString(1, username);
+                pstmt.executeUpdate();
+            }
             
-            // Lock account after 3 failed attempts
-            lockAccountIfNeeded(username);
+            // Lock account if needed (in same transaction)
+            try (PreparedStatement pstmt = conn.prepareStatement(lockSql)) {
+                pstmt.setString(1, username);
+                pstmt.executeUpdate();
+            }
+            
+            conn.commit(); // Commit transaction
             
         } catch (SQLException ex) {
+            if (conn != null) {
+                try {
+                    conn.rollback();
+                } catch (SQLException rollbackEx) {
+                    System.out.print("Error rolling back transaction: " + rollbackEx.getMessage());
+                }
+            }
             System.out.print("Error updating failed attempts: " + ex.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true); // Reset auto commit
+                    conn.close();
+                } catch (SQLException closeEx) {
+                    System.out.print("Error closing connection: " + closeEx.getMessage());
+                }
+            }
         }
     }
     
     private void lockAccountIfNeeded(String username) {
-        String sql = "UPDATE users SET locked = 1 WHERE username = ? AND failed_attempts >= 3";
-        
-        try (Connection conn = DriverManager.getConnection(driverURL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
-            pstmt.setString(1, username);
-            pstmt.executeUpdate();
-            
-        } catch (SQLException ex) {
-            System.out.print("Error locking account: " + ex.getMessage());
-        }
+        // This method is now handled within incrementFailedAttempts
+        // Keeping it for backward compatibility but making it empty
     }
     
     private void resetFailedAttempts(String username) {
         String sql = "UPDATE users SET failed_attempts = 0, last_failed_attempt = NULL WHERE username = ?";
         
-        try (Connection conn = DriverManager.getConnection(driverURL);
+        try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, username);
