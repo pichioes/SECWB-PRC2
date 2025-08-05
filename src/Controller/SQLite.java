@@ -28,7 +28,7 @@ public class SQLite {
         return conn;
     }
     
-    // Simple password hashing (without salt)
+    // Password hashing 
     public String hashPassword(String password) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -107,7 +107,7 @@ public class SQLite {
         }
     }
      
-    // Create user table without salt column
+    // Create user table
     public void createUserTable() {
         String sql = "CREATE TABLE IF NOT EXISTS users (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -209,9 +209,8 @@ public class SQLite {
         }
     }
     
-    // User registration with input validation (no salt)
+    // User registration with input validation
     public boolean addUser(String username, String password) {
-        // Input validation
         if (!isValidUsername(username) || !isValidPassword(password)) {
             return false;
         }
@@ -354,7 +353,7 @@ public class SQLite {
         return product;
     }
     
-    // User authentication without salt - improved connection handling
+    // User authentication 
     public User authenticateUser(String username, String password) {
         String sql = "SELECT id, username, password, role, locked, failed_attempts FROM users WHERE username = ?";
         
@@ -399,7 +398,7 @@ public class SQLite {
         Connection conn = null;
         try {
             conn = getConnection();
-            conn.setAutoCommit(false); // Start transaction
+            conn.setAutoCommit(false);
             
             // Update failed attempts
             try (PreparedStatement pstmt = conn.prepareStatement(updateSql)) {
@@ -407,13 +406,13 @@ public class SQLite {
                 pstmt.executeUpdate();
             }
             
-            // Lock account if needed (in same transaction)
+            // Lock account if needed
             try (PreparedStatement pstmt = conn.prepareStatement(lockSql)) {
                 pstmt.setString(1, username);
                 pstmt.executeUpdate();
             }
             
-            conn.commit(); // Commit transaction
+            conn.commit();
             
         } catch (SQLException ex) {
             if (conn != null) {
@@ -438,7 +437,7 @@ public class SQLite {
     
     private void lockAccountIfNeeded(String username) {
         // This method is now handled within incrementFailedAttempts
-        // Keeping it for backward compatibility but making it empty
+        // Keeping it for now
     }
     
     private void resetFailedAttempts(String username) {
