@@ -49,7 +49,6 @@ public class SQLite {
         }
     }
     
-    // Creates the history table for purchase logs
     public void createHistoryTable() {
         String sql = "CREATE TABLE IF NOT EXISTS history (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -68,7 +67,6 @@ public class SQLite {
         }
     }
     
-    // Creates the log table for system events
     public void createLogsTable() {
         String sql = "CREATE TABLE IF NOT EXISTS logs (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -87,7 +85,6 @@ public class SQLite {
         }
     }
      
-    // Creates the products table, sample data already exists
     public void createProductTable() {
         String sql = "CREATE TABLE IF NOT EXISTS product (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -105,7 +102,7 @@ public class SQLite {
         }
     }
      
-    // Create users table, can be seen in the homepage some user roles
+    // Create user table
     public void createUserTable() {
         String sql = "CREATE TABLE IF NOT EXISTS users (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -126,7 +123,6 @@ public class SQLite {
         }
     }
     
-    // Drop history table upon starting app (clean slate)
     public void dropHistoryTable() {
         String sql = "DROP TABLE IF EXISTS history;";
 
@@ -139,7 +135,6 @@ public class SQLite {
         }
     }
     
-    // Drop logs table upon starting app (clean slate)
     public void dropLogsTable() {
         String sql = "DROP TABLE IF EXISTS logs;";
 
@@ -152,7 +147,6 @@ public class SQLite {
         }
     }
     
-    // Drop products table upon starting app (clean slate)
     public void dropProductTable() {
         String sql = "DROP TABLE IF EXISTS product;";
 
@@ -165,7 +159,6 @@ public class SQLite {
         }
     }
     
-    // Remove all users upon starting app (clean slate)
     public void dropUserTable() {
         String sql = "DROP TABLE IF EXISTS users;";
 
@@ -178,7 +171,6 @@ public class SQLite {
         }
     }
     
-    // Add logs into product purchase history
     public void addHistory(String username, String name, int stock, String timestamp) {
         String sql = "INSERT INTO history(username,name,stock,timestamp) VALUES(?,?,?,?)";
         
@@ -194,7 +186,6 @@ public class SQLite {
         }
     }
     
-    // Add system event/s logs
     public void addLogs(String event, String username, String desc, String timestamp) {
         String sql = "INSERT INTO logs(event,username,desc,timestamp) VALUES(?,?,?,?)";
         
@@ -210,7 +201,6 @@ public class SQLite {
         }
     }
     
-    // Add products into the existing table & list
     public void addProduct(String name, int stock, double price) {
         String sql = "INSERT INTO product(name,stock,price) VALUES(?,?,?)";
         
@@ -225,15 +215,14 @@ public class SQLite {
         }
     }
     
-    // User registration (mainly for input validation)
+    // User registration with input validation
     public boolean addUser(String username, String password) {
-        // Check if username or password is valid. If !valid, deny registration
         if (!isValidUsername(username) || !isValidPassword(password)) {
             return false;
         }
         
-        String hashedPassword = hashPassword(password); // hash password upon input
-        String sql = "INSERT INTO users(username, password) VALUES(?, ?)"; // insert user after hashing
+        String hashedPassword = hashPassword(password);
+        String sql = "INSERT INTO users(username, password) VALUES(?, ?)";
         
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -244,13 +233,12 @@ public class SQLite {
             return true;
             
         } catch (SQLException ex) {
-            // Error catching
             System.out.print("Registration failed: " + ex.getMessage());
             return false;
         }
     }
     
-    // Fetch history and add data into history table
+    
     public ArrayList<History> getHistory(){
         String sql = "SELECT id, username, name, stock, timestamp FROM history";
         ArrayList<History> histories = new ArrayList<History>();
@@ -272,7 +260,6 @@ public class SQLite {
         return histories;
     }
     
-    // Fetch log contents
     public ArrayList<Logs> getLogs(){
         String sql = "SELECT id, event, username, desc, timestamp FROM logs";
         ArrayList<Logs> logs = new ArrayList<Logs>();
@@ -294,7 +281,6 @@ public class SQLite {
         return logs;
     }
     
-    // Fetch product list
     public ArrayList<Product> getProduct(){
         String sql = "SELECT id, name, stock, price FROM product";
         ArrayList<Product> products = new ArrayList<Product>();
@@ -315,7 +301,6 @@ public class SQLite {
         return products;
     }
     
-    // Fetch users in database (upon starting the app, only sample users are present)
     public ArrayList<User> getUsers(){
         String sql = "SELECT id, username, password, role, locked FROM users";
         ArrayList<User> users = new ArrayList<User>();
@@ -335,7 +320,6 @@ public class SQLite {
         return users;
     }
     
-    // Adding of user into the database mismo. Default user role = 2 (client role)
     public void addUser(String username, String password, int role) {
         String sql = "INSERT INTO users(username,password,role) VALUES(?,?,?)";
         
@@ -351,7 +335,6 @@ public class SQLite {
         }
     }
     
-    // Deleting of user/s
     public void removeUser(String username) {
         String sql = "DELETE FROM users WHERE username=?";
 
@@ -365,7 +348,6 @@ public class SQLite {
         }
     }
     
-    // Fetch product list
     public Product getProduct(String name){
         String sql = "SELECT name, stock, price FROM product WHERE name=?";
         Product product = null;
@@ -384,7 +366,7 @@ public class SQLite {
         return product;
     }
     
-    // User authentication in login page
+    // User authentication 
     public User authenticateUser(String username, String password) {
         String sql = "SELECT id, username, password, role, locked, failed_attempts FROM users WHERE username = ?";
         
@@ -418,7 +400,7 @@ public class SQLite {
         return null;
     }
     
-    // Increment failed attempts & user lockout method
+    // Lockout method
     private void incrementFailedAttempts(String username) {
         String sql = "UPDATE users SET " +
                     "failed_attempts = failed_attempts + 1, " +
@@ -442,7 +424,6 @@ public class SQLite {
         }
     }
     
-    // Checker if account was locked. This is used to declare in system that the user is locked 
     private void checkIfAccountLocked(String username) {
         String sql = "SELECT locked FROM users WHERE username = ?";
         
@@ -461,7 +442,6 @@ public class SQLite {
         }
     }
     
-    // Function called to reset failed attempts. Called when user successfully logs into account
     private void resetFailedAttempts(String username) {
         String sql = "UPDATE users SET failed_attempts = 0, last_failed_attempt = NULL WHERE username = ?";
         
@@ -476,15 +456,13 @@ public class SQLite {
         }
     }
     
-    // Valid username checker. Must be >3 and <50 characters. Only letters, numbers, and "_" allowed
+    // Input validation methods
     public boolean isValidUsername(String username) {
         if (username == null || username.trim().isEmpty()) return false;
         if (username.length() < 3 || username.length() > 50) return false;
         return username.matches("^[a-zA-Z0-9_]+$"); // Alphanumeric and underscore only
     }
     
-    // Valid password checker. Must have at least 1 upper & lowercase letter, 1 number, & 1 special character
-    // Min. of 8 characters to be valid
     public boolean isValidPassword(String password) {
         if (password == null || password.length() < 8) return false;
         
@@ -509,7 +487,7 @@ public class SQLite {
             
         } catch (SQLException ex) {
             System.out.print("Error checking username: " + ex.getMessage());
-            return true; // Assume username exists for safety
+            return true; // Assume exists to be safe
         }
     }
 }
