@@ -14,10 +14,10 @@ public class Register extends javax.swing.JPanel {
     private void initComponents() {
 
         registerBtn = new javax.swing.JButton();
-        passwordFld = new javax.swing.JTextField();
+        passwordFld = new javax.swing.JPasswordField();
         usernameFld = new javax.swing.JTextField();
-        jLabel1 = new javax.swing.JLabel();
-        confpassFld = new javax.swing.JTextField();
+        errormessageFld = new javax.swing.JLabel();
+        confpassFld = new javax.swing.JPasswordField();
         backBtn = new javax.swing.JButton();
 
         registerBtn.setFont(new java.awt.Font("Tahoma", 1, 24)); // NOI18N
@@ -38,10 +38,10 @@ public class Register extends javax.swing.JPanel {
         usernameFld.setHorizontalAlignment(javax.swing.JTextField.CENTER);
         usernameFld.setBorder(javax.swing.BorderFactory.createTitledBorder(new javax.swing.border.LineBorder(new java.awt.Color(0, 0, 0), 2, true), "USERNAME", javax.swing.border.TitledBorder.CENTER, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font("Tahoma", 0, 12))); // NOI18N
 
-        jLabel1.setFont(new java.awt.Font("Tahoma", 1, 48)); // NOI18N
-        jLabel1.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
-        jLabel1.setText("SECURITY Svcs");
-        jLabel1.setToolTipText("");
+        errormessageFld.setFont(new java.awt.Font("Tahoma", 1, 48)); // NOI18N
+        errormessageFld.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        errormessageFld.setText("SECURITY Svcs");
+        errormessageFld.setToolTipText("");
 
         confpassFld.setBackground(new java.awt.Color(240, 240, 240));
         confpassFld.setFont(new java.awt.Font("Tahoma", 0, 18)); // NOI18N
@@ -64,7 +64,7 @@ public class Register extends javax.swing.JPanel {
                 .addContainerGap(200, Short.MAX_VALUE)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                     .addComponent(usernameFld)
-                    .addComponent(jLabel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(errormessageFld, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                     .addComponent(passwordFld, javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(confpassFld, javax.swing.GroupLayout.Alignment.LEADING))
                 .addContainerGap(200, Short.MAX_VALUE))
@@ -83,7 +83,7 @@ public class Register extends javax.swing.JPanel {
                 .addContainerGap()
                 .addComponent(backBtn)
                 .addGap(24, 24, 24)
-                .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 46, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(errormessageFld, javax.swing.GroupLayout.PREFERRED_SIZE, 46, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(40, 40, 40)
                 .addComponent(usernameFld, javax.swing.GroupLayout.PREFERRED_SIZE, 59, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
@@ -106,12 +106,12 @@ public class Register extends javax.swing.JPanel {
     }//GEN-LAST:event_backBtnActionPerformed
 
 
-    // Variables declaration - do not modify//GEN-BEGIN:variables
+    // Variables declaration - do not modify
     private javax.swing.JButton backBtn;
     private javax.swing.JTextField confpassFld;
-    private javax.swing.JLabel jLabel1;
+    private javax.swing.JLabel errormessageFld;
     private javax.swing.JTextField passwordFld;
     private javax.swing.JButton registerBtn;
     private javax.swing.JTextField usernameFld;
-    // End of variables declaration//GEN-END:variables
+    // End of variables declaration
 }
