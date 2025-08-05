@@ -62,7 +62,7 @@ public class Main {
         sqlite.addUser("client2", "qwerty1234", 2);
         
         
-        // Get users
+        // Get history
         ArrayList<History> histories = sqlite.getHistory();
         for(int nCtr = 0; nCtr < histories.size(); nCtr++){
             System.out.println("===== History " + histories.get(nCtr).getId() + " =====");
@@ -72,7 +72,7 @@ public class Main {
             System.out.println(" Timestamp: " + histories.get(nCtr).getTimestamp());
         }
         
-        // Get users
+        // Get logs
         ArrayList<Logs> logs = sqlite.getLogs();
         for(int nCtr = 0; nCtr < logs.size(); nCtr++){
             System.out.println("===== Logs " + logs.get(nCtr).getId() + " =====");
@@ -82,7 +82,7 @@ public class Main {
             System.out.println(" Timestamp: " + logs.get(nCtr).getTimestamp());
         }
         
-        // Get users
+        // Get products
         ArrayList<Product> products = sqlite.getProduct();
         for(int nCtr = 0; nCtr < products.size(); nCtr++){
             System.out.println("===== Product " + products.get(nCtr).getId() + " =====");

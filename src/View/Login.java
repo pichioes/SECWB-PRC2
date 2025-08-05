@@ -117,7 +117,7 @@ public class Login extends javax.swing.JPanel {
                 return;
             }
             
-            // If secure auth fails, try simple authentication for existing plain text passwords
+            // If secure auth fails, try authentication for existing plain text passwords
             user = simpleAuthenticate(username, password);
             
             if (user != null) {
