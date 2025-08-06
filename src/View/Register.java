@@ -139,6 +139,14 @@ public class Register extends javax.swing.JPanel {
         boolean registrationSuccess = frame.main.sqlite.addUser(username, password);
         
         if (registrationSuccess) {
+            
+            frame.main.sqlite.addLogs(
+            "REGISTER",
+            username,
+            "User registered successfully.",
+            new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
+            
             // Clear fields
             usernameFld.setText("");
             passwordFld.setText("");
@@ -149,6 +157,13 @@ public class Register extends javax.swing.JPanel {
             frame.loginNav();
         } else {
             errorDisplayFld.setText("Registration failed");
+            
+            frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
         }
     }                                           
 
@@ -161,10 +176,28 @@ public class Register extends javax.swing.JPanel {
         // Validate username
         if (!frame.main.sqlite.isValidUsername(username)) {
             if (username.length() < 3) {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Username too short (min 3 chars)";
             } else if (username.length() > 50) {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Username too long (max 50 chars)";
             } else {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Username contains invalid characters";
             }
         }
@@ -172,6 +205,12 @@ public class Register extends javax.swing.JPanel {
         // Validate password
         if (!frame.main.sqlite.isValidPassword(password)) {
             if (password.length() < 8) {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Password too short (min 8 chars)";
             }
             
@@ -181,18 +220,49 @@ public class Register extends javax.swing.JPanel {
             boolean hasSpecial = password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?].*");
             
             if (!hasUpper) {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Password needs uppercase letter";
+                
             } else if (!hasLower) {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Password needs lowercase letter";
             } else if (!hasDigit) {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Password needs a number";
             } else if (!hasSpecial) {
+                 frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 return "Password needs special character";
             }
         }
         
         // Check if passwords match
         if (!password.equals(confirmPassword)) {
+             frame.main.sqlite.addLogs(
+                "REGISTER",
+                username,
+                "User registration failed",
+                new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
             return "Passwords do not match";
         }
         

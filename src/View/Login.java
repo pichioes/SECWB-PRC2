@@ -114,6 +114,14 @@ public class Login extends javax.swing.JPanel {
                 frame.setCurrentUser(user);
                 frame.mainNav();
                 clearFields();
+                
+               frame.main.sqlite.addLogs(
+               "LOGIN",
+               username,
+               "Successful Login",
+               new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+               );
+               
                 return;
             }
             
@@ -125,14 +133,37 @@ public class Login extends javax.swing.JPanel {
                 frame.setCurrentUser(user);
                 frame.mainNav();
                 clearFields();
+                
+               frame.main.sqlite.addLogs(
+               "LOGIN",
+               username,
+               "Successful Login",
+               new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+               );
+
             } else {
+            frame.main.sqlite.addLogs(
+            "LOGIN",
+            username,
+            "Invalid Details",
+            new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
                 showError("Invalid username or password");
+                
             }
             
         } catch (Exception e) {
             System.out.println("Login error: " + e.getMessage());
             e.printStackTrace();
             showError("Login failed. Please try again.");
+            
+            frame.main.sqlite.addLogs(
+            "LOGIN",
+            username,
+            "Failed Login",
+            new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+            );
+            
         }
         
         // Clear password field for security
