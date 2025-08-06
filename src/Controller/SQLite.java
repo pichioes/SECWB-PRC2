@@ -434,7 +434,14 @@ public class SQLite {
             ResultSet rs = pstmt.executeQuery();
             
             if (rs.next() && rs.getInt("locked") == 1) {
+                
                 System.out.println("Account " + username + " has been locked due to too many failed attempts.");
+                
+                addLogs("ACCOUNT_LOCKED",
+                        username,
+                        "Too many login attempts.",
+                       new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+                );
             }
             
         } catch (SQLException ex) {
