@@ -18,6 +18,10 @@ public class SQLite {
     public int DEBUG_MODE = 0;
     String driverURL = "jdbc:sqlite:" + "database.db";
     
+    // Role constants for account locking
+    private static final int DISABLED_ROLE = 1;
+    private static final int LOCKOUT_DURATION_MINUTES = 15;
+    
     // Connection
     private Connection getConnection() throws SQLException {
         return DriverManager.getConnection(driverURL);
@@ -111,15 +115,40 @@ public class SQLite {
             + " role INTEGER DEFAULT 2,\n"
             + " locked INTEGER DEFAULT 0,\n"
             + " failed_attempts INTEGER DEFAULT 0,\n"
-            + " last_failed_attempt TIMESTAMP\n"
+            + " last_failed_attempt TIMESTAMP,\n"
+            + " original_role INTEGER,\n"
+            + " lock_time TIMESTAMP\n"
             + ");";
 
         try (Connection conn = getConnection();
             Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
             System.out.println("Table users in database.db created.");
+            
+            // Add columns if they don't exist (for existing databases)
+            addColumnIfNotExists("users", "original_role", "INTEGER");
+            addColumnIfNotExists("users", "lock_time", "TIMESTAMP");
+            
         } catch (Exception ex) {
             System.out.print(ex);
+        }
+    }
+    
+    // Helper method to add columns to existing tables
+    private void addColumnIfNotExists(String tableName, String columnName, String columnType) {
+        try (Connection conn = getConnection()) {
+            DatabaseMetaData metaData = conn.getMetaData();
+            ResultSet columns = metaData.getColumns(null, null, tableName, columnName);
+            
+            if (!columns.next()) {
+                String sql = "ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnType;
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute(sql);
+                    System.out.println("Added column " + columnName + " to table " + tableName);
+                }
+            }
+        } catch (SQLException ex) {
+            System.out.println("Error adding column " + columnName + ": " + ex.getMessage());
         }
     }
     
@@ -302,6 +331,9 @@ public class SQLite {
     }
     
     public ArrayList<User> getUsers(){
+        // Check for expired lockouts before returning users
+        checkAndRestoreExpiredLockouts();
+        
         String sql = "SELECT id, username, password, role, locked FROM users";
         ArrayList<User> users = new ArrayList<User>();
         
@@ -319,7 +351,6 @@ public class SQLite {
         } catch (Exception ex) {}
         return users;
     }
-    
     public void addUser(String username, String password, int role) {
         String sql = "INSERT INTO users(username,password,role) VALUES(?,?,?)";
         
@@ -368,6 +399,9 @@ public class SQLite {
     
     // User authentication 
     public User authenticateUser(String username, String password) {
+        // First, check and restore any expired lockouts
+        checkAndRestoreExpiredLockouts();
+        
         String sql = "SELECT id, username, password, role, locked, failed_attempts FROM users WHERE username = ?";
         
         try (Connection conn = getConnection();
@@ -402,16 +436,38 @@ public class SQLite {
     
     // Lockout method
     private void incrementFailedAttempts(String username) {
+        // get the current role to store as original_role
+        String getCurrentRoleSql = "SELECT role FROM users WHERE username = ?";
+        int currentRole = 2; // default role (client)
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(getCurrentRoleSql)) {
+            
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                currentRole = rs.getInt("role");
+            }
+        } catch (SQLException ex) {
+            System.out.print("Error getting current role: " + ex.getMessage());
+        }
+        
+        // Update failed attempts and potentially lock account
         String sql = "UPDATE users SET " +
                     "failed_attempts = failed_attempts + 1, " +
                     "last_failed_attempt = datetime('now'), " +
-                    "locked = CASE WHEN failed_attempts + 1 >= 3 THEN 1 ELSE locked END " +
+                    "locked = CASE WHEN failed_attempts + 1 >= 3 THEN 1 ELSE locked END, " +
+                    "original_role = CASE WHEN failed_attempts + 1 >= 3 AND original_role IS NULL THEN ? ELSE original_role END, " +
+                    "role = CASE WHEN failed_attempts + 1 >= 3 THEN ? ELSE role END, " +
+                    "lock_time = CASE WHEN failed_attempts + 1 >= 3 THEN datetime('now') ELSE lock_time END " +
                     "WHERE username = ?";
         
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
-            pstmt.setString(1, username);
+            pstmt.setInt(1, currentRole); // Store original role (default 2)
+            pstmt.setInt(2, DISABLED_ROLE); // Set to disabled role (role 1)
+            pstmt.setString(3, username);
             int rowsAffected = pstmt.executeUpdate();
             
             if (rowsAffected > 0) {
@@ -460,6 +516,33 @@ public class SQLite {
             
         } catch (SQLException ex) {
             System.out.print("Error resetting failed attempts: " + ex.getMessage());
+        }
+    }
+    
+    public void checkAndRestoreExpiredLockouts() {
+        String sql = "UPDATE users SET " +
+                    "locked = 0, " +
+                    "role = original_role, " +
+                    "failed_attempts = 0, " +
+                    "original_role = NULL, " +
+                    "lock_time = NULL, " +
+                    "last_failed_attempt = NULL " +
+                    "WHERE locked = 1 " +
+                    "AND lock_time IS NOT NULL " +
+                    "AND datetime('now') > datetime(lock_time, '+' || ? || ' minutes')";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, LOCKOUT_DURATION_MINUTES);
+            int rowsAffected = pstmt.executeUpdate();
+            
+            if (rowsAffected > 0) {
+                System.out.println(rowsAffected + " account(s) unlocked and role restored after " + LOCKOUT_DURATION_MINUTES + " minute lockout period.");
+            }
+            
+        } catch (SQLException ex) {
+            System.out.print("Error checking expired lockouts: " + ex.getMessage());
         }
     }
     
