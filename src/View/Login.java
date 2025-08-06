@@ -142,15 +142,18 @@ public class Login extends javax.swing.JPanel {
                );
 
             } else {
-            frame.main.sqlite.addLogs(
-            "LOGIN",
-            username,
-            "Invalid Details",
-            new java.sql.Timestamp(new java.util.Date().getTime()).toString()
-            );
-                showError("Invalid username or password");
-                
-            }
+             if (frame.main.sqlite.isAccountLocked(username)) {
+                    showError("Account is locked, please wait for 15 minutes.");
+                } else {
+                    frame.main.sqlite.addLogs(
+                    "LOGIN",
+                    username,
+                    "Invalid Details",
+                    new java.sql.Timestamp(new java.util.Date().getTime()).toString()
+                    );
+                    showError("Invalid username or password");
+                }
+        }
             
         } catch (Exception e) {
             System.out.println("Login error: " + e.getMessage());

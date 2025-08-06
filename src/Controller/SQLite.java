@@ -495,7 +495,7 @@ public class SQLite {
                 
                 addLogs("ACCOUNT_LOCKED",
                         username,
-                        "Too many login attempts.",
+                        "Account Locked: Too many login attempts.",
                        new java.sql.Timestamp(new java.util.Date().getTime()).toString()
                 );
             }
@@ -580,4 +580,19 @@ public class SQLite {
             return true; // Assume exists to be safe
         }
     }
+    
+    public boolean isAccountLocked(String username) {
+    String sql = "SELECT locked FROM users WHERE username = ?";
+    try (Connection conn = getConnection();
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        pstmt.setString(1, username);
+        ResultSet rs = pstmt.executeQuery();
+        if (rs.next()) {
+            return rs.getInt("locked") == 1;
+        }
+    } catch (SQLException ex) {
+        System.out.print("Error checking lock status: " + ex.getMessage());
+    }
+    return false;
+}
 }
