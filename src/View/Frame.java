@@ -43,9 +43,9 @@ public class Frame extends javax.swing.JFrame {
         // Role-based access control
         int userRole = currentUser.getRole();
         adminBtn.setVisible(userRole == 5); // Admin only
-        managerBtn.setVisible(userRole >= 4); // Manager and Admin
-        staffBtn.setVisible(userRole >= 3); // Staff, Manager, and Admin
-        clientBtn.setVisible(userRole >= 2); // All roles
+        managerBtn.setVisible(userRole == 4); // Manager only
+        staffBtn.setVisible(userRole == 3); // Staff only
+        clientBtn.setVisible(userRole == 2); // All roles
     }
     
     private boolean hasPermission(int requiredRole) {
