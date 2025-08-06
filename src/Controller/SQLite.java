@@ -12,11 +12,17 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 public class SQLite {
     
     public int DEBUG_MODE = 0;
     String driverURL = "jdbc:sqlite:" + "database.db";
+    
+    // Role constants for account locking
+    private static final int DISABLED_ROLE = 1;
+    private static final int LOCKOUT_DURATION_MINUTES = 15;
     
     // Connection
     private Connection getConnection() throws SQLException {
@@ -102,7 +108,7 @@ public class SQLite {
         }
     }
      
-    // Create user table
+    // Create user table 
     public void createUserTable() {
         String sql = "CREATE TABLE IF NOT EXISTS users (\n"
             + " id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -111,15 +117,41 @@ public class SQLite {
             + " role INTEGER DEFAULT 2,\n"
             + " locked INTEGER DEFAULT 0,\n"
             + " failed_attempts INTEGER DEFAULT 0,\n"
-            + " last_failed_attempt TIMESTAMP\n"
+            + " last_failed_attempt TIMESTAMP,\n"
+            + " original_role INTEGER,\n"
+            + " lock_time TIMESTAMP\n"
             + ");";
 
         try (Connection conn = getConnection();
             Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
             System.out.println("Table users in database.db created.");
+            
+            // Add columns in the initialized database
+            // Columns are used for the account locking mechanism
+            addColumnIfNotExists("users", "original_role", "INTEGER");
+            addColumnIfNotExists("users", "lock_time", "TIMESTAMP");
+            
         } catch (Exception ex) {
             System.out.print(ex);
+        }
+    }
+    
+    // Helper method to add columns to existing tables
+    private void addColumnIfNotExists(String tableName, String columnName, String columnType) {
+        try (Connection conn = getConnection()) {
+            DatabaseMetaData metaData = conn.getMetaData();
+            ResultSet columns = metaData.getColumns(null, null, tableName, columnName);
+            
+            if (!columns.next()) {
+                String sql = "ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnType;
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute(sql);
+                    System.out.println("Added column " + columnName + " to table " + tableName);
+                }
+            }
+        } catch (SQLException ex) {
+            System.out.println("Error adding column " + columnName + ": " + ex.getMessage());
         }
     }
     
@@ -302,6 +334,9 @@ public class SQLite {
     }
     
     public ArrayList<User> getUsers(){
+        // Check for expired lockouts before returning users
+        checkAndRestoreExpiredLockouts();
+        
         String sql = "SELECT id, username, password, role, locked FROM users";
         ArrayList<User> users = new ArrayList<User>();
         
@@ -366,8 +401,12 @@ public class SQLite {
         return product;
     }
     
-    // User authentication 
+    // User authentication
+    // Checks for expired lockouts
     public User authenticateUser(String username, String password) {
+        // First checks and restore any expired lockouts
+        checkAndRestoreExpiredLockouts();
+        
         String sql = "SELECT id, username, password, role, locked, failed_attempts FROM users WHERE username = ?";
         
         try (Connection conn = getConnection();
@@ -401,17 +440,40 @@ public class SQLite {
     }
     
     // Lockout method
+    // Stores original role and sets disabled role (role 1)
     private void incrementFailedAttempts(String username) {
+        // get the current role to store as original_role
+        String getCurrentRoleSql = "SELECT role FROM users WHERE username = ?";
+        int currentRole = 2; // default role to be set
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(getCurrentRoleSql)) {
+            
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                currentRole = rs.getInt("role");
+            }
+        } catch (SQLException ex) {
+            System.out.print("Error getting current role: " + ex.getMessage());
+        }
+        
+        // Update failed attempts and lock account (if needed)
         String sql = "UPDATE users SET " +
                     "failed_attempts = failed_attempts + 1, " +
                     "last_failed_attempt = datetime('now'), " +
-                    "locked = CASE WHEN failed_attempts + 1 >= 3 THEN 1 ELSE locked END " +
+                    "locked = CASE WHEN failed_attempts + 1 >= 3 THEN 1 ELSE locked END, " +
+                    "original_role = CASE WHEN failed_attempts + 1 >= 3 AND original_role IS NULL THEN ? ELSE original_role END, " +
+                    "role = CASE WHEN failed_attempts + 1 >= 3 THEN ? ELSE role END, " +
+                    "lock_time = CASE WHEN failed_attempts + 1 >= 3 THEN datetime('now') ELSE lock_time END " +
                     "WHERE username = ?";
         
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
-            pstmt.setString(1, username);
+            pstmt.setInt(1, currentRole); // Stores original role (default is 2)
+            pstmt.setInt(2, DISABLED_ROLE); // Sets to disabled role (role 1)
+            pstmt.setString(3, username);
             int rowsAffected = pstmt.executeUpdate();
             
             if (rowsAffected > 0) {
@@ -424,6 +486,7 @@ public class SQLite {
         }
     }
     
+    // Checker if the account is locked
     private void checkIfAccountLocked(String username) {
         String sql = "SELECT locked FROM users WHERE username = ?";
         
@@ -434,7 +497,7 @@ public class SQLite {
             ResultSet rs = pstmt.executeQuery();
             
             if (rs.next() && rs.getInt("locked") == 1) {
-                System.out.println("Account " + username + " has been locked due to too many failed attempts.");
+                System.out.println("Account " + username + " has been locked and role set to disabled for " + LOCKOUT_DURATION_MINUTES + " minutes.");
             }
             
         } catch (SQLException ex) {
@@ -442,6 +505,7 @@ public class SQLite {
         }
     }
     
+    // Reset failed login attempts
     private void resetFailedAttempts(String username) {
         String sql = "UPDATE users SET failed_attempts = 0, last_failed_attempt = NULL WHERE username = ?";
         
@@ -456,13 +520,72 @@ public class SQLite {
         }
     }
     
-    // Input validation methods
+    // Method to check and restore expired lockouts after 15 mins
+    public void checkAndRestoreExpiredLockouts() {
+        String sql = "UPDATE users SET " +
+                    "locked = 0, " +
+                    "role = original_role, " +
+                    "failed_attempts = 0, " +
+                    "original_role = NULL, " +
+                    "lock_time = NULL, " +
+                    "last_failed_attempt = NULL " +
+                    "WHERE locked = 1 " +
+                    "AND lock_time IS NOT NULL " +
+                    "AND datetime('now') > datetime(lock_time, '+' || ? || ' minutes')";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setInt(1, LOCKOUT_DURATION_MINUTES);
+            int rowsAffected = pstmt.executeUpdate();
+            
+            if (rowsAffected > 0) {
+                System.out.println(rowsAffected + " account(s) unlocked and role restored after " + LOCKOUT_DURATION_MINUTES + " minute lockout period.");
+            }
+            
+        } catch (SQLException ex) {
+            System.out.print("Error checking expired lockouts: " + ex.getMessage());
+        }
+    }
+    
+    // Manually unlock accounts (for admin use only)
+    public boolean unlockAccount(String username) {
+        String sql = "UPDATE users SET " +
+                    "locked = 0, " +
+                    "role = COALESCE(original_role, role), " +
+                    "failed_attempts = 0, " +
+                    "original_role = NULL, " +
+                    "lock_time = NULL, " +
+                    "last_failed_attempt = NULL " +
+                    "WHERE username = ? AND locked = 1";
+        
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            int rowsAffected = pstmt.executeUpdate();
+            
+            if (rowsAffected > 0) {
+                System.out.println("Account " + username + " has been manually unlocked and role restored.");
+                return true;
+            }
+            
+        } catch (SQLException ex) {
+            System.out.print("Error unlocking account: " + ex.getMessage());
+        }
+        return false;
+    }
+    
+    // Input validation for username in registration
+    // Alphanumeric and underscore only
     public boolean isValidUsername(String username) {
         if (username == null || username.trim().isEmpty()) return false;
         if (username.length() < 3 || username.length() > 50) return false;
-        return username.matches("^[a-zA-Z0-9_]+$"); // Alphanumeric and underscore only
+        return username.matches("^[a-zA-Z0-9_]+$"); 
     }
     
+    // Input validation for password in registration
+    // Min. of 8 characters. Must have upper, lower, #, and special char
     public boolean isValidPassword(String password) {
         if (password == null || password.length() < 8) return false;
         
